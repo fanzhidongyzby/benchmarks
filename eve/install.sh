@@ -115,7 +115,9 @@ install_openhands() {
   make build
 
   # 切换到 v1.11.0 版本
-  cd /data/openhands/benchmarks/vendor/software-agent-sdk/ && git checkout v1.11.0 && cd -
+  cd /data/openhands/benchmarks/vendor/software-agent-sdk/
+  git remote add fork https://git@github.com/fanzhidongyzby/software-agent-sdk.git
+  git fetch fork eve-v1.11.0:eve-v1.11.0 && git checkout eve-v1.11.0 && cd -
 }
 
 # 安装Docker
