@@ -217,3 +217,9 @@ workspace/
 # Evaluation outputs
 eval_outputs/
 builds/
+.idea
+.claude
+llm_config-*.json
+runid
+eve_eval_result.json
+instances.txt
