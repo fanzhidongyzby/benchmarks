@@ -239,12 +239,14 @@ class SWEBenchEvaluation(Evaluation):
         )
 
         # 处理系统提示词
-        system_prompt_path = os.getenv("SYSTEM_PROMPT_FILE", None) or "system_prompt.j2"
+        system_prompt_filename = "system_prompt.j2"
         system_prompt_b64 = os.getenv("SYSTEM_PROMPT_B64", None)
         if system_prompt_b64:
             import base64
 
-            system_prompt_path = "/tmp/system_prompt.j2"
+            system_prompt_path = "/data/openhands/benchmarks/vendor/software-agent-sdk/openhands-sdk/openhands/sdk/agent/prompts/system_prompt_new.j2"
+            system_prompt_filename = "/agent-server/openhands-sdk/openhands/sdk/agent/prompts/system_prompt_new.j2"
+
             system_prompt = base64.b64decode(system_prompt_b64).decode("utf-8")
             with open(system_prompt_path, "w", encoding="utf-8") as f:
                 f.write(system_prompt)
@@ -256,7 +258,7 @@ class SWEBenchEvaluation(Evaluation):
             llm=self.metadata.llm,
             tools=tools,
             system_prompt_kwargs={"cli_mode": True},
-            system_prompt_filename=system_prompt_path,
+            system_prompt_filename=system_prompt_filename,
             # TODO: we can enable condenser and security analyzer later
             # and have them configurable via EvalMetadata
             # condenser=get_default_condenser(

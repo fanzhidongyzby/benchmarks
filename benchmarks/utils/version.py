@@ -25,3 +25,7 @@ def get_sdk_sha() -> str:
 
 SDK_SHA = get_sdk_sha()
 SDK_SHORT_SHA = SDK_SHA[:7]
+
+# 强制锁死SDK版本
+SDK_SHORT_SHA = "b498a69"
+

@@ -70,7 +70,6 @@ class Config:
     eval_workers: int = 50
     instance_timeout_sec: float = 3600.0
     system_prompt_b64: str = None
-    system_prompt_file: str = None
     eve_file: str = "eve_eval_result.json"
     oss_root: str = "oss://antllm-agentic-jp/ant-eve/swe-openhands"
 
@@ -99,7 +98,6 @@ class Config:
             eval_workers=int(os.environ.get("EVAL_WORKERS", "50")),
             instance_timeout_sec=float(os.environ.get("INSTANCE_TIMEOUT_SEC", "3600.0")),
             system_prompt_b64=os.environ.get("SYSTEM_PROMPT_B64", None),
-            system_prompt_file=os.environ.get("SYSTEM_PROMPT_FILE", None),
             eve_file=os.environ.get("EVE_FILE", "eve_eval_result.json"),
             oss_root=os.environ.get(
                 "OSS_ROOT", "oss://antllm-agentic-jp/ant-eve/swe-openhands"
@@ -840,7 +838,6 @@ def main():
         "EVAL_WORKERS",
         "INSTANCE_TIMEOUT_SEC",
         "SYSTEM_PROMPT_B64",
-        "SYSTEM_PROMPT_FILE",
         "EVE_FILE",
         "OSS_ROOT",
     ]:

@@ -122,7 +122,17 @@ install_openhands() {
   # 切换到 v1.11.0 版本
   cd vendor/software-agent-sdk/
   git remote set-url origin https://git@github.com/fanzhidongyzby/software-agent-sdk.git
-  git fetch && git checkout eve-v1.11.0 && cd - && mkdir runid
+  git fetch && git checkout eve-v1.11.0
+
+  # 拷贝容器venv和uv配置
+  docker run -d -it --entrypoint bash --name openhands-demo-container \
+    ghcr.io/openhands/eval-agent-server:b498a69-sweb.eval.x86_64.sympy_1776_sympy-24443-source-minimal
+  docker cp openhands-demo-container:/agent-server/.env/ .
+  docker cp openhands-demo-container:/agent-server/uv-managed-python/ .
+  docker rm -f openhands-demo-container
+
+  # 准备评测目录
+  cd - && mkdir runid
 }
 
 # 安装Docker
