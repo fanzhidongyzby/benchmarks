@@ -166,7 +166,12 @@ class SWEBenchEvaluation(Evaluation):
             workspace = DockerWorkspace(
                 server_image=agent_server_image,
                 working_dir="/workspace",
-                forward_env=forward_env or [],
+                forward_env=(forward_env or []) + [
+                    "INSTANCE_TIMEOUT_SEC", # 控制单条实例的超时时间
+                    "SYSTEM_PROMPT_B64", # 直接设置系统提示词，优先级高于 SYSTEM_PROMPT_FILE
+                    "SYSTEM_PROMPT_FILE", # 系统提示词文件路径，默认为 "system_prompt.j2"
+                ],
+                volumes=["/data/openhands/benchmarks/vendor/software-agent-sdk:/agent-server"],
             )
         elif self.metadata.workspace_type == "remote":
             runtime_api_key = os.getenv("RUNTIME_API_KEY")
@@ -232,10 +237,26 @@ class SWEBenchEvaluation(Evaluation):
             # Disable browser tools in CLI mode
             enable_browser=False,
         )
+
+        # 处理系统提示词
+        system_prompt_path = os.getenv("SYSTEM_PROMPT_FILE", None) or "system_prompt.j2"
+        system_prompt_b64 = os.getenv("SYSTEM_PROMPT_B64", None)
+        if system_prompt_b64:
+            import base64
+
+            system_prompt_path = "/tmp/system_prompt.j2"
+            system_prompt = base64.b64decode(system_prompt_b64).decode("utf-8")
+            with open(system_prompt_path, "w", encoding="utf-8") as f:
+                f.write(system_prompt)
+                f.flush()
+
+            logger.info("Using custom system prompt: %s", system_prompt)
+
         agent = Agent(
             llm=self.metadata.llm,
             tools=tools,
             system_prompt_kwargs={"cli_mode": True},
+            system_prompt_filename=system_prompt_path,
             # TODO: we can enable condenser and security analyzer later
             # and have them configurable via EvalMetadata
             # condenser=get_default_condenser(
