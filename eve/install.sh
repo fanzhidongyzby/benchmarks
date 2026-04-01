@@ -20,11 +20,17 @@ load_env() {
         echo "警告: 未找到 ${env_file}，将使用环境变量"
     fi
 
-    # 验证必需的环境变量
-    : "${OSS_ACCESS_KEY_ID:?环境变量 OSS_ACCESS_KEY_ID 未设置}"
-    : "${OSS_ACCESS_KEY_SECRET:?环境变量 OSS_ACCESS_KEY_SECRET 未设置}"
-    : "${DOCKER_USERNAME:?环境变量 DOCKER_USERNAME 未设置}"
-    : "${DOCKER_PASSWORD:?环境变量 DOCKER_PASSWORD 未设置}"
+    if [[ ! -e /root/.ossutilconfig ]]; then
+        # 验证必需的环境变量
+        : "${OSS_ACCESS_KEY_ID:?环境变量 OSS_ACCESS_KEY_ID 未设置}"
+        : "${OSS_ACCESS_KEY_SECRET:?环境变量 OSS_ACCESS_KEY_SECRET 未设置}"
+    fi
+
+    if [[ ! -e /root/.docker/config.json ]]; then
+        # 验证必需的环境变量
+        : "${DOCKER_USERNAME:?环境变量 DOCKER_USERNAME 未设置}"
+        : "${DOCKER_PASSWORD:?环境变量 DOCKER_PASSWORD 未设置}"
+    fi
 }
 
 # 检查是否以root用户运行
@@ -90,8 +96,10 @@ install_conda() {
 
 install_openhands() {
   if [[ -e /data/openhands ]]; then
-      echo "openhands 已安装"
-      return 0
+    echo "openhands 已安装，备份到：/data/openhands.bak-日期"
+    mv /data/openhands /data/openhands.bak-$(date +%Y%m%d%H%M%S)
+  else
+    echo "cd /data/openhands/benchmarks" >> /root/.bashrc
   fi
 
   if ! conda env list | grep -q "^openhands "; then
@@ -103,21 +111,18 @@ install_openhands() {
   fi
 
   echo "安装 openhands"
-  mkdir -p /data/openhands && cd /data/openhands
-
-  git clone https://git@github.com/fanzhidongyzby/benchmarks.git
-  echo "cd /data/openhands/benchmarks" >> /root/.bashrc
-  cd benchmarks && git checkout eve-680ce0f-v1.11.0 && mkdir runid
+  git clone -b eve-680ce0f-v1.11.0 https://git@github.com/fanzhidongyzby/benchmarks.git /data/openhands/benchmarks
 
   # 激活 conda 环境并安装依赖
+  cd /data/openhands/benchmarks
   conda activate openhands
   pip install uv requests
   make build
 
   # 切换到 v1.11.0 版本
-  cd /data/openhands/benchmarks/vendor/software-agent-sdk/
-  git remote add fork https://git@github.com/fanzhidongyzby/software-agent-sdk.git
-  git fetch fork eve-v1.11.0:eve-v1.11.0 && git checkout eve-v1.11.0 && cd -
+  cd vendor/software-agent-sdk/
+  git remote set-url origin https://git@github.com/fanzhidongyzby/software-agent-sdk.git
+  git fetch && git checkout eve-v1.11.0 && cd - && mkdir runid
 }
 
 # 安装Docker
