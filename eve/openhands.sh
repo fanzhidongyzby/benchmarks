@@ -22,10 +22,10 @@ nohup uv run swebench-infer llm_config.json \
     --dataset princeton-nlp/SWE-bench_Verified \
     --split test \
     --max-iterations 500 \
-    --num-workers 100 \
+    --num-workers 10 \
     --workspace docker \
     &> infer.log &
-tail -f infer.log | more
+tail -f infer.log | grep -v 'benchmarks.utils.conversation'
 
 # 进度
 cat $(find eval_outputs -name output.jsonl) | wc -l

@@ -61,6 +61,8 @@ class Config:
     llm_config: str = ""
     llm_timeout: int = 30
     llm_stream: bool = False
+    llm_health_check: bool = True
+    llm_retries: int = 3
     instances: str = ""
     skip_infer: bool = False
     max_iteration: int = 500
@@ -84,9 +86,11 @@ class Config:
             task_id=os.environ.get("TASK_ID", "unknown"),
             llm_config=os.environ.get("LLM_CONFIG", ""),
             llm_timeout=int(os.environ.get("LLM_TIMEOUT", "30")),
-            llm_stream=bool(os.environ.get("LLM_STREAM", "")),
+            llm_stream=os.environ.get("LLM_STREAM", "").lower() in ["1", "y", "yes"],
+            llm_health_check=os.environ.get("LLM_HEALTH_CHECK", "1").lower() in ["1", "y", "yes"],
+            llm_retries=int(os.environ.get("LLM_RETRIES", "3")),
             instances=os.environ.get("INSTANCES", ""),
-            skip_infer=bool(os.environ.get("SKIP_INFER", "")),
+            skip_infer=os.environ.get("SKIP_INFER", "").lower() in ["1", "y", "yes"],
             max_iteration=int(os.environ.get("MAX_ITERATION", "500")),
             infer_workers=int(os.environ.get("INFER_WORKERS", "50")),
             eval_workers=int(os.environ.get("EVAL_WORKERS", "50")),
@@ -418,13 +422,14 @@ class LLMHealthCheckTimeout(Exception):
     pass
 
 
-def _check_llm_health(llm_config: dict, timeout: int = 30, stream: bool = False):
+def _check_llm_health(llm_config: dict, timeout: int = 30, stream: bool = False, retries: int = 3):
     """检查 LLM 服务是否可用
 
     Args:
         llm_config: LLM 配置字典
         timeout: 超时时间（秒），默认 30 秒
         stream: 是否使用流式请求，默认 False
+        retries: 重试次数，默认 3 次，以防网络抖动
     """
 
     def timeout_handler(_signum, _frame):
@@ -470,40 +475,59 @@ def _check_llm_health(llm_config: dict, timeout: int = 30, stream: bool = False)
     print(f"模型: {model}")
     print(f"超时时间: {timeout} 秒")
     print(f"流式请求: {stream}")
+    print(f"重试次数: {retries}")
 
-    # 设置硬超时
-    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-    signal.alarm(timeout)
+    last_error = None
+    for attempt in range(1, retries + 1):
+        # 设置硬超时
+        old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(timeout)
 
-    try:
-        response = requests.post(
-            url,
-            headers=headers,
-            json=payload,
-            timeout=(timeout, timeout),  # (连接超时, 读取超时)
-        )
-        response.raise_for_status()
-        print(f"LLM 服务健康检查通过 (HTTP {response.status_code})")
+        try:
+            response = requests.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=(timeout, timeout),  # (连接超时, 读取超时)
+            )
+            response.raise_for_status()
+            print(f"LLM 服务健康检查通过 (HTTP {response.status_code})")
+            return  # 成功则直接返回
 
-    except LLMHealthCheckTimeout:
-        raise
+        except LLMHealthCheckTimeout as e:
+            last_error = e
+            print(f"第 {attempt}/{retries} 次尝试超时")
 
-    except requests.exceptions.Timeout:
-        raise RuntimeError(f"LLM 服务健康检查超时 ({timeout}秒)")
+        except requests.exceptions.Timeout as e:
+            last_error = RuntimeError(f"LLM 服务健康检查超时 ({timeout}秒)")
+            print(f"第 {attempt}/{retries} 次尝试超时: {e}")
 
-    except requests.exceptions.HTTPError as e:
-        raise RuntimeError(f"LLM 服务健康检查失败: {e}")
+        except requests.exceptions.HTTPError as e:
+            last_error = RuntimeError(f"LLM 服务健康检查失败: {e}")
+            print(f"第 {attempt}/{retries} 次尝试失败: {e}")
 
-    except requests.exceptions.ConnectionError as e:
-        raise RuntimeError(f"LLM 服务连接失败: {e}")
+        except requests.exceptions.ConnectionError as e:
+            last_error = RuntimeError(f"LLM 服务连接失败: {e}")
+            print(f"第 {attempt}/{retries} 次连接失败: {e}")
 
-    except Exception as e:
-        raise RuntimeError(f"LLM 服务健康检查异常: {e}")
+        except Exception as e:
+            last_error = RuntimeError(f"LLM 服务健康检查异常: {e}")
+            print(f"第 {attempt}/{retries} 次异常: {e}")
 
-    finally:
-        # 取消超时并恢复原有 handler
-        signal.alarm(0)
-        signal.signal(signal.SIGALRM, old_handler)
+        finally:
+            # 取消超时并恢复原有 handler
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old_handler)
+
+        # 如果还有重试机会，等待后重试
+        if attempt < retries:
+            import time
+            wait_time = attempt * 2  # 递增等待：2s, 4s, ...
+            print(f"等待 {wait_time} 秒后重试...")
+            time.sleep(wait_time)
+
+    # 所有重试都失败
+    raise last_error
 
 
 def prepare_instances(config: Config):
@@ -780,10 +804,10 @@ def main():
     cleanup_environment()
 
     # LLM 健康检查
-    if config.llm_config:
+    if config.llm_health_check and config.llm_config:
         try:
             llm_config = json.loads(config.llm_config)
-            _check_llm_health(llm_config, timeout=config.llm_timeout, stream=config.llm_stream)
+            _check_llm_health(llm_config, timeout=config.llm_timeout, stream=config.llm_stream, retries=config.llm_retries)
         except Exception as e:
             print(f"错误: {e}")
             sys.exit(1)
