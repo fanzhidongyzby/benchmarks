@@ -174,7 +174,8 @@ class SWEBenchEvaluation(Evaluation):
                 server_image=agent_server_image,
                 working_dir="/workspace",
                 forward_env=(forward_env or []) + [
-                    "PYTHONPATH",
+                    "PYTHONPATH", # 保证容器内使用挂载的 SDK 代码
+                    "LLM_GEMINI", # GEMINI 特殊控制逻辑控制
                     "INSTANCE_TIMEOUT_SEC", # 控制单条实例的超时时间
                     "SYSTEM_PROMPT_FILE", # 系统提示词文件路径，默认为 "system_prompt.j2"
                 ],
