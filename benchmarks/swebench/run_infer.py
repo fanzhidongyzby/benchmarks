@@ -163,16 +163,28 @@ class SWEBenchEvaluation(Evaluation):
                             f"{wrapped_result.error}; log={wrapped_result.log_path}"
                         )
 
+            # 临时设置 PYTHONPATH，让容器内挂载的 SDK 源码优先于 site-packages
+            _old_pythonpath = os.environ.get("PYTHONPATH")
+            os.environ["PYTHONPATH"] = ":".join([
+                "/agent-server/openhands-sdk",
+                "/agent-server/openhands-workspace",
+                "/agent-server/openhands-agent-server",
+            ])
             workspace = DockerWorkspace(
                 server_image=agent_server_image,
                 working_dir="/workspace",
                 forward_env=(forward_env or []) + [
+                    "PYTHONPATH",
                     "INSTANCE_TIMEOUT_SEC", # 控制单条实例的超时时间
-                    "SYSTEM_PROMPT_B64", # 直接设置系统提示词，优先级高于 SYSTEM_PROMPT_FILE
                     "SYSTEM_PROMPT_FILE", # 系统提示词文件路径，默认为 "system_prompt.j2"
                 ],
                 volumes=["/data/openhands/benchmarks/vendor/software-agent-sdk:/agent-server"],
             )
+            # 恢复宿主机 PYTHONPATH
+            if _old_pythonpath is None:
+                os.environ.pop("PYTHONPATH", None)
+            else:
+                os.environ["PYTHONPATH"] = _old_pythonpath
         elif self.metadata.workspace_type == "remote":
             runtime_api_key = os.getenv("RUNTIME_API_KEY")
             sdk_short_sha = os.getenv("SDK_SHORT_SHA", SDK_SHORT_SHA)
