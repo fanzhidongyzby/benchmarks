@@ -97,6 +97,19 @@ BENCHMARKS_REPO="${BENCHMARKS_REPO:-https://git@github.com/fanzhidongyzby/benchm
 SDK_BRANCH="${SDK_BRANCH:-eve-v1.11.0}"
 SDK_REPO="${SDK_REPO:-https://git@github.com/fanzhidongyzby/software-agent-sdk.git}"
 
+# 验证远程仓库分支是否存在
+verify_remote_branch() {
+  local repo="$1"
+  local branch="$2"
+  local name="$3"
+  echo "验证 ${name}: ${repo} @ ${branch}"
+  if ! git ls-remote --heads "$repo" "$branch" | grep -q "refs/heads/$branch"; then
+    echo "错误: ${name} 分支不存在 - ${repo} @ ${branch}"
+    exit 1
+  fi
+  echo "验证通过: ${name}"
+}
+
 # 检查 git 仓库是否有远程更新，有更新返回 0，无更新返回 1
 check_git_update() {
   local repo_dir="$1"
@@ -116,24 +129,6 @@ check_git_update() {
   fi
 }
 
-# 在 SDK 目录下安全地切换/更新代码，保护 .venv 和 uv-managed-python
-sdk_safe_checkout() {
-  local target="$1"  # 分支名或 origin/分支名
-  local sdk_dir="/data/openhands/benchmarks/vendor/software-agent-sdk"
-  cd "$sdk_dir"
-
-  local tmp_dir
-  tmp_dir=$(mktemp -d)
-  [[ -d .venv ]] && mv .venv "$tmp_dir/"
-  [[ -d uv-managed-python ]] && mv uv-managed-python "$tmp_dir/"
-
-  git checkout -B "$SDK_BRANCH" "$target"
-
-  [[ -d "$tmp_dir/.venv" ]] && mv "$tmp_dir/.venv" .
-  [[ -d "$tmp_dir/uv-managed-python" ]] && mv "$tmp_dir/uv-managed-python" .
-  rm -rf "$tmp_dir"
-}
-
 install_openhands() {
   # 确保 conda 环境存在
   if ! conda env list | grep -q "^openhands "; then
@@ -145,6 +140,10 @@ install_openhands() {
   fi
 
   conda activate openhands
+
+  # 验证仓库和分支配置
+  verify_remote_branch "$BENCHMARKS_REPO" "$BENCHMARKS_BRANCH" "BENCHMARKS"
+  verify_remote_branch "$SDK_REPO" "$SDK_BRANCH" "SDK"
 
   # 全新安装
   if [[ ! -e /data/openhands/benchmarks/.git ]]; then
@@ -177,6 +176,8 @@ install_openhands() {
 
   echo "检查 benchmarks 仓库更新..."
   cd /data/openhands/benchmarks
+  git remote set-url origin "$BENCHMARKS_REPO"
+  git fetch origin "$BENCHMARKS_BRANCH"
   # 强制切到目标分支
   git checkout -B "$BENCHMARKS_BRANCH" "origin/$BENCHMARKS_BRANCH" 2>/dev/null || true
   # 检查远程是否有更新
@@ -188,11 +189,13 @@ install_openhands() {
 
   echo "检查 SDK 仓库更新..."
   cd /data/openhands/benchmarks/vendor/software-agent-sdk
+  git remote set-url origin "$SDK_REPO"
+  git fetch origin "$SDK_BRANCH"
   # 强制切到目标分支
-  sdk_safe_checkout "origin/$SDK_BRANCH"
+  git checkout -B "$SDK_BRANCH" "origin/$SDK_BRANCH"
   # 检查远程是否有更新
   if check_git_update /data/openhands/benchmarks/vendor/software-agent-sdk "$SDK_BRANCH"; then
-    sdk_safe_checkout "origin/$SDK_BRANCH"
+    git reset --hard "origin/$SDK_BRANCH"
     updated=true
   fi
 

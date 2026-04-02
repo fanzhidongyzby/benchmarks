@@ -73,11 +73,16 @@ class Config:
     max_iteration: int = 500
     infer_workers: int = 50
     eval_workers: int = 50
+    max_eval_retries: int = 3
     instance_timeout_sec: float = 3600.0
     system_prompt_file: str = None
     eve_file: str = "eve_eval_result.json"
     oss_root: str = "oss://antllm-agentic-jp/ant-eve/swe-openhands"
     oss_prompts_root: str = oss_root + "/prompts"
+    benchmarks_repo: str = "https://git@github.com/fanzhidongyzby/benchmarks.git"
+    benchmarks_branch: str = "eve-680ce0f-v1.11.0"
+    sdk_repo: str = "https://git@github.com/fanzhidongyzby/software-agent-sdk.git"
+    sdk_branch: str = "eve-v1.11.0"
 
     # 路径
     script_dir: Path = field(default_factory=Path)
@@ -109,10 +114,15 @@ class Config:
             infer_workers=int(os.environ.get("INFER_WORKERS", "50")),
             eval_workers=int(os.environ.get("EVAL_WORKERS", "50")),
             instance_timeout_sec=float(os.environ.get("INSTANCE_TIMEOUT_SEC", "3600.0")),
+            max_eval_retries=int(os.environ.get("MAX_EVAL_RETRIES", "3")),
             system_prompt_file=os.environ.get("SYSTEM_PROMPT_FILE", None),
             eve_file=os.environ.get("EVE_FILE", "eve_eval_result.json"),
             oss_root=oss_root,
-            oss_prompts_root = oss_prompts_root,
+            oss_prompts_root=oss_prompts_root,
+            benchmarks_repo=os.environ.get("BENCHMARKS_REPO", "https://git@github.com/fanzhidongyzby/benchmarks.git"),
+            benchmarks_branch=os.environ.get("BENCHMARKS_BRANCH", "eve-680ce0f-v1.11.0"),
+            sdk_repo=os.environ.get("SDK_REPO", "https://git@github.com/fanzhidongyzby/software-agent-sdk.git"),
+            sdk_branch=os.environ.get("SDK_BRANCH", "eve-v1.11.0"),
             script_dir=script_dir,
             root_dir=root_dir,
             log_file=root_dir / "submit.log",
@@ -793,17 +803,25 @@ def worker_main(config: Config):
     print("=" * 50)
     print("EVE SWE-bench Worker 启动")
     print("=" * 50)
-    print(f"TASK_ID:       {config.task_id}")
-    print(f"SKIP_INFER:    {config.skip_infer}")
-    print(f"MAX_ITERATION: {config.max_iteration}")
-    print(f"INFER_WORKERS: {config.infer_workers}")
-    print(f"EVAL_WORKERS:  {config.eval_workers}")
-    print(f"INSTANCES:     {config.instances or '<全量数据集>'}")
-    print(f"OSS_BUCKET:    {config.oss_bucket}")
-    print(f"开始时间:      {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"TASK_ID:             {config.task_id}")
+    print(f"开始时间:            {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("-" * 50)
+    print("运行时配置:")
+    print(f"  SKIP_INFER:          {config.skip_infer}")
+    print(f"  INSTANCES:           {config.instances or '<全量数据集>'}")
+    print(f"  MAX_ITERATION:       {config.max_iteration}")
+    print(f"  INFER_WORKERS:       {config.infer_workers}")
+    print(f"  EVAL_WORKERS:        {config.eval_workers}")
+    print(f"  MAX_EVAL_RETRIES:    {config.max_eval_retries}")
+    print(f"  INSTANCE_TIMEOUT_SEC:    {config.instance_timeout_sec}s")
+    print("-" * 50)
+    print("LLM 配置:")
+    print(f"  LLM_GEMINI:          {config.llm_gemini}")
+    print(f"  LLM_TIMEOUT:         {config.llm_timeout}s")
+    print(f"  LLM_STREAM:          {config.llm_stream}")
+    print(f"  LLM_HEALTH_CHECK:    {config.llm_health_check}")
+    print(f"  LLM_RETRIES:         {config.llm_retries}")
     print("=" * 50)
-
-    error_message = None
 
     try:
         os.chdir(config.root_dir)
@@ -881,15 +899,22 @@ def main():
             print(f"升级完成，exec {new_submit}")
             os.execv(sys.executable, [sys.executable, new_submit])
 
-    # 打印提交信息
+    # 打印提交信息（环境配置）
     print("=" * 50)
     print("EVE SWE-bench 提交任务")
     print("=" * 50)
-    print(f"TASK_ID:       {config.task_id}")
-    print(f"SKIP_INFER:    {config.skip_infer}")
-    print(f"INSTANCES:     {config.instances or '<全量数据集>'}")
-    print(f"OSS_BUCKET:    {config.oss_bucket}")
-    print(f"提交时间:      {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"TASK_ID:            {config.task_id}")
+    print(f"提交时间:           {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("-" * 50)
+    print("环境配置:")
+    print(f"  BENCHMARKS_REPO:    {config.benchmarks_repo}")
+    print(f"  BENCHMARKS_BRANCH:  {config.benchmarks_branch}")
+    print(f"  SDK_REPO:           {config.sdk_repo}")
+    print(f"  SDK_BRANCH:         {config.sdk_branch}")
+    print(f"  OSS_ROOT:           {config.oss_root}")
+    print(f"  OSS_BUCKET:         {config.oss_bucket}")
+    print(f"  SYSTEM_PROMPT_FILE: {config.system_prompt_file or '<默认>'}")
+    print(f"  EVE_FILE:           {config.eve_file}")
     print("=" * 50)
 
     # 清理环境
