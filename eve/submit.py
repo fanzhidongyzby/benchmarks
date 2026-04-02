@@ -78,7 +78,6 @@ class Config:
     system_prompt_file: str = None
     eve_file: str = "eve_eval_result.json"
     oss_root: str = "oss://antllm-agentic-jp/ant-eve/swe-openhands"
-    oss_prompts_root: str = oss_root + "/prompts"
     benchmarks_repo: str = "https://git@github.com/fanzhidongyzby/benchmarks.git"
     benchmarks_branch: str = "eve-680ce0f-v1.11.0"
     sdk_repo: str = "https://git@github.com/fanzhidongyzby/software-agent-sdk.git"
@@ -94,11 +93,6 @@ class Config:
         """从环境变量加载配置"""
         script_dir = Path(__file__).parent.resolve()
         root_dir = script_dir.parent
-
-        oss_root = os.environ.get(
-            "OSS_ROOT", "oss://antllm-agentic-jp/ant-eve/swe-openhands"
-        ).rstrip("/")
-        oss_prompts_root: str = oss_root + "/prompts"
 
         return cls(
             task_id=os.environ.get("TASK_ID", "unknown"),
@@ -117,8 +111,9 @@ class Config:
             max_eval_retries=int(os.environ.get("MAX_EVAL_RETRIES", "3")),
             system_prompt_file=os.environ.get("SYSTEM_PROMPT_FILE", None),
             eve_file=os.environ.get("EVE_FILE", "eve_eval_result.json"),
-            oss_root=oss_root,
-            oss_prompts_root=oss_prompts_root,
+            oss_root=os.environ.get(
+                "OSS_ROOT", "oss://antllm-agentic-jp/ant-eve/swe-openhands"
+            ).rstrip("/"),
             benchmarks_repo=os.environ.get("BENCHMARKS_REPO", "https://git@github.com/fanzhidongyzby/benchmarks.git"),
             benchmarks_branch=os.environ.get("BENCHMARKS_BRANCH", "eve-680ce0f-v1.11.0"),
             sdk_repo=os.environ.get("SDK_REPO", "https://git@github.com/fanzhidongyzby/software-agent-sdk.git"),
@@ -131,6 +126,10 @@ class Config:
     @property
     def oss_bucket(self) -> str:
         return f"{self.oss_root}/{self.task_id}"
+
+    @property
+    def oss_prompts_root(self) -> str:
+        return f"{self.oss_root}/prompts"
 
     def validate(self) -> None:
         """验证配置"""
@@ -807,20 +806,20 @@ def worker_main(config: Config):
     print(f"开始时间:            {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("-" * 50)
     print("运行时配置:")
-    print(f"  SKIP_INFER:          {config.skip_infer}")
-    print(f"  INSTANCES:           {config.instances or '<全量数据集>'}")
-    print(f"  MAX_ITERATION:       {config.max_iteration}")
-    print(f"  INFER_WORKERS:       {config.infer_workers}")
-    print(f"  EVAL_WORKERS:        {config.eval_workers}")
-    print(f"  MAX_EVAL_RETRIES:    {config.max_eval_retries}")
-    print(f"  INSTANCE_TIMEOUT_SEC:    {config.instance_timeout_sec}s")
+    print(f"* SKIP_INFER:              {config.skip_infer}")
+    print(f"* INSTANCES:               {config.instances or '<全量数据集>'}")
+    print(f"* MAX_ITERATION:           {config.max_iteration}")
+    print(f"* INFER_WORKERS:           {config.infer_workers}")
+    print(f"* EVAL_WORKERS:            {config.eval_workers}")
+    print(f"* MAX_EVAL_RETRIES:        {config.max_eval_retries}")
+    print(f"* INSTANCE_TIMEOUT_SEC:    {config.instance_timeout_sec}s")
     print("-" * 50)
     print("LLM 配置:")
-    print(f"  LLM_GEMINI:          {config.llm_gemini}")
-    print(f"  LLM_TIMEOUT:         {config.llm_timeout}s")
-    print(f"  LLM_STREAM:          {config.llm_stream}")
-    print(f"  LLM_HEALTH_CHECK:    {config.llm_health_check}")
-    print(f"  LLM_RETRIES:         {config.llm_retries}")
+    print(f"  LLM_HEALTH_CHECK:        {config.llm_health_check}")
+    print(f"  LLM_RETRIES:             {config.llm_retries}")
+    print(f"  LLM_TIMEOUT:             {config.llm_timeout}s")
+    print(f"  LLM_STREAM:              {config.llm_stream}")
+    print(f"  LLM_GEMINI:              {config.llm_gemini}")
     print("=" * 50)
 
     try:
@@ -891,7 +890,8 @@ def main():
             stdin=subprocess.DEVNULL,
         )
         if ret.returncode != 0:
-            print(f"警告: install.sh 执行失败 (exit {ret.returncode})，使用当前版本继续")
+            print(f"错误: install.sh 执行失败 (exit {ret.returncode})")
+            sys.exit(1)
         else:
             # 标记已升级，exec 新的 submit.py
             os.environ["_EVE_UPGRADED"] = "1"
@@ -912,9 +912,10 @@ def main():
     print(f"  SDK_REPO:           {config.sdk_repo}")
     print(f"  SDK_BRANCH:         {config.sdk_branch}")
     print(f"  OSS_ROOT:           {config.oss_root}")
-    print(f"  OSS_BUCKET:         {config.oss_bucket}")
-    print(f"  SYSTEM_PROMPT_FILE: {config.system_prompt_file or '<默认>'}")
+    print(f"  SYSTEM_PROMPT_FILE: {config.system_prompt_file or 'system_prompt.j2'}")
     print(f"  EVE_FILE:           {config.eve_file}")
+    print(f"  任务数据地址:        {config.oss_bucket}")
+    print(f"  提示词模板地址:      {config.oss_prompts_root}")
     print("=" * 50)
 
     # 清理环境
