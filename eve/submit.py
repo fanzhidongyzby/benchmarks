@@ -147,8 +147,8 @@ def is_in_conda_env() -> bool:
     return os.environ.get("CONDA_DEFAULT_ENV") == CONDA_ENV
 
 
-def cleanup_environment():
-    """清理环境：终止残留进程和容器"""
+def cleanup_environment(config: Config):
+    """清理环境：终止残留进程、容器和上次运行产物"""
     print("清理环境...")
 
     # 1. 终止 infer/eval 相关进程
@@ -181,6 +181,30 @@ def cleanup_environment():
             print("  无 Docker 容器")
     except Exception as e:
         print(f"  清理 Docker 容器时出错: {e}")
+
+    # 3. 清理上次运行的产物文件
+    cleanup_targets = [
+        config.root_dir / "eval_outputs",
+        config.root_dir / "infer.log",
+        config.root_dir / "eval.log",
+        config.root_dir / "submit.log",
+        config.root_dir / config.eve_file,
+    ]
+    for target in cleanup_targets:
+        if target.exists():
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+    # runid 目录只清理内容，保留目录
+    runid_dir = config.root_dir / "runid"
+    if runid_dir.exists():
+        for item in runid_dir.iterdir():
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()
+    print("  已清理上次运行产物")
 
 
 # ============================================================================
@@ -846,6 +870,7 @@ def main():
         print("=" * 50)
         ret = subprocess.run(
             ["bash", "-c", f"source {CONDA_SH} && conda activate {CONDA_ENV} && bash {INSTALL_SCRIPT}"],
+            stdin=subprocess.DEVNULL,
         )
         if ret.returncode != 0:
             print(f"警告: install.sh 执行失败 (exit {ret.returncode})，使用当前版本继续")
@@ -868,7 +893,7 @@ def main():
     print("=" * 50)
 
     # 清理环境
-    cleanup_environment()
+    cleanup_environment(config)
 
     # LLM 健康检查
     if config.llm_health_check and config.llm_config:
