@@ -16,8 +16,6 @@ load_env() {
         set -a
         source "${env_file}"
         set +a
-    else
-        echo "警告: 未找到 ${env_file}，将使用环境变量"
     fi
 }
 
