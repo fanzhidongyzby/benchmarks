@@ -84,17 +84,18 @@ install_conda() {
     bash miniconda.sh -b -u -p /root/miniconda3 && rm -f miniconda.sh
     source /root/miniconda3/bin/activate
     conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
-    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r、、
     conda init bash
   fi
 
   source /root/miniconda3/etc/profile.d/conda.sh
 }
 
-BENCHMARKS_BRANCH="eve-680ce0f-v1.11.0"
-BENCHMARKS_REPO="https://git@github.com/fanzhidongyzby/benchmarks.git"
-SDK_BRANCH="eve-v1.11.0"
-SDK_REPO="https://git@github.com/fanzhidongyzby/software-agent-sdk.git"
+# 支持从环境变量动态覆盖
+BENCHMARKS_BRANCH="${BENCHMARKS_BRANCH:-eve-680ce0f-v1.11.0}"
+BENCHMARKS_REPO="${BENCHMARKS_REPO:-https://git@github.com/fanzhidongyzby/benchmarks.git}"
+SDK_BRANCH="${SDK_BRANCH:-eve-v1.11.0}"
+SDK_REPO="${SDK_REPO:-https://git@github.com/fanzhidongyzby/software-agent-sdk.git}"
 
 # 检查 git 仓库是否有远程更新，有更新返回 0，无更新返回 1
 check_git_update() {

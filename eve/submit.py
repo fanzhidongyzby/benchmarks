@@ -929,6 +929,11 @@ def main():
         "SYSTEM_PROMPT_FILE",
         "EVE_FILE",
         "OSS_ROOT",
+        "BENCHMARKS_BRANCH",
+        "BENCHMARKS_REPO",
+        "SDK_BRANCH",
+        "SDK_REPO",
+        "MAX_EVAL_RETRIES",
     ]:
         value = os.environ.get(key, "")
         if value:
