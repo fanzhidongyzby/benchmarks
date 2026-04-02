@@ -47,6 +47,10 @@ except ImportError:
 CONDA_SH = "/root/miniconda3/etc/profile.d/conda.sh"
 CONDA_ENV = "openhands"
 
+# 升级后的 submit.py 路径
+SUBMIT_SCRIPT = "/data/openhands/benchmarks/eve/submit.py"
+INSTALL_SCRIPT = "/data/openhands/benchmarks/eve/install.sh"
+
 
 # ============================================================================
 # 配置
@@ -59,6 +63,7 @@ class Config:
 
     task_id: str = "unknown"
     llm_config: str = ""
+    llm_gemini: bool = False
     llm_timeout: int = 30
     llm_stream: bool = False
     llm_health_check: bool = True
@@ -93,6 +98,7 @@ class Config:
         return cls(
             task_id=os.environ.get("TASK_ID", "unknown"),
             llm_config=os.environ.get("LLM_CONFIG", ""),
+            llm_gemini=os.environ.get("LLM_GEMINI", "").lower() in ["1", "y", "yes"],
             llm_timeout=int(os.environ.get("LLM_TIMEOUT", "30")),
             llm_stream=os.environ.get("LLM_STREAM", "").lower() in ["1", "y", "yes"],
             llm_health_check=os.environ.get("LLM_HEALTH_CHECK", "1").lower() in ["1", "y", "yes"],
@@ -833,6 +839,23 @@ def main():
         worker_main(config)
         return
 
+    # 升级检查：运行 install.sh 重装环境，然后 exec 新的 submit.py
+    if not os.environ.get("_EVE_UPGRADED"):
+        print("=" * 50)
+        print("检查并升级环境...")
+        print("=" * 50)
+        ret = subprocess.run(
+            ["bash", "-c", f"source {CONDA_SH} && conda activate {CONDA_ENV} && bash {INSTALL_SCRIPT}"],
+        )
+        if ret.returncode != 0:
+            print(f"警告: install.sh 执行失败 (exit {ret.returncode})，使用当前版本继续")
+        else:
+            # 标记已升级，exec 新的 submit.py
+            os.environ["_EVE_UPGRADED"] = "1"
+            new_submit = SUBMIT_SCRIPT
+            print(f"升级完成，exec {new_submit}")
+            os.execv(sys.executable, [sys.executable, new_submit])
+
     # 打印提交信息
     print("=" * 50)
     print("EVE SWE-bench 提交任务")
@@ -867,6 +890,7 @@ def main():
     for key in [
         "TASK_ID",
         "LLM_CONFIG",
+        "LLM_GEMINI",
         "LLM_TIMEOUT",
         "LLM_STREAM",
         "LLM_HEALTH_CHECK",
