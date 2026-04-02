@@ -125,11 +125,11 @@ install_openhands() {
   git fetch && git checkout eve-v1.11.0
 
   # 拷贝容器venv和uv配置
-  docker run -d -it --entrypoint bash --name openhands-demo-container \
+  docker create --name openhands-container \
     ghcr.io/openhands/eval-agent-server:b498a69-sweb.eval.x86_64.sympy_1776_sympy-24443-source-minimal
-  docker cp openhands-demo-container:/agent-server/.env/ .
-  docker cp openhands-demo-container:/agent-server/uv-managed-python/ .
-  docker rm -f openhands-demo-container
+  docker cp openhands-container:/agent-server/.venv/ .
+  docker cp openhands-container:/agent-server/uv-managed-python/ .
+  docker rm -f openhands-container
 
   # 准备评测目录
   cd - && mkdir runid

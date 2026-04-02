@@ -69,9 +69,10 @@ class Config:
     infer_workers: int = 50
     eval_workers: int = 50
     instance_timeout_sec: float = 3600.0
-    system_prompt_b64: str = None
+    system_prompt_file: str = None
     eve_file: str = "eve_eval_result.json"
     oss_root: str = "oss://antllm-agentic-jp/ant-eve/swe-openhands"
+    oss_prompts_root: str = oss_root + "/prompts"
 
     # 路径
     script_dir: Path = field(default_factory=Path)
@@ -83,6 +84,11 @@ class Config:
         """从环境变量加载配置"""
         script_dir = Path(__file__).parent.resolve()
         root_dir = script_dir.parent
+
+        oss_root = os.environ.get(
+            "OSS_ROOT", "oss://antllm-agentic-jp/ant-eve/swe-openhands"
+        ).rstrip("/")
+        oss_prompts_root: str = oss_root + "/prompts"
 
         return cls(
             task_id=os.environ.get("TASK_ID", "unknown"),
@@ -97,11 +103,10 @@ class Config:
             infer_workers=int(os.environ.get("INFER_WORKERS", "50")),
             eval_workers=int(os.environ.get("EVAL_WORKERS", "50")),
             instance_timeout_sec=float(os.environ.get("INSTANCE_TIMEOUT_SEC", "3600.0")),
-            system_prompt_b64=os.environ.get("SYSTEM_PROMPT_B64", None),
+            system_prompt_file=os.environ.get("SYSTEM_PROMPT_FILE", None),
             eve_file=os.environ.get("EVE_FILE", "eve_eval_result.json"),
-            oss_root=os.environ.get(
-                "OSS_ROOT", "oss://antllm-agentic-jp/ant-eve/swe-openhands"
-            ).rstrip("/"),
+            oss_root=oss_root,
+            oss_prompts_root = oss_prompts_root,
             script_dir=script_dir,
             root_dir=root_dir,
             log_file=root_dir / "submit.log",
@@ -534,6 +539,40 @@ def _check_llm_health(llm_config: dict, timeout: int = 30, stream: bool = False,
     raise last_error
 
 
+def download_system_prompt(config: Config):
+    """从 OSS 下载自定义系统提示词文件到 prompts 目录"""
+    if not config.system_prompt_file:
+        return
+
+    prompts_dir = (
+        config.root_dir
+        / "vendor"
+        / "software-agent-sdk"
+        / "openhands-sdk"
+        / "openhands"
+        / "sdk"
+        / "agent"
+        / "prompts"
+    )
+    oss_path = f"{config.oss_prompts_root}/{config.system_prompt_file}"
+    target_path = prompts_dir / config.system_prompt_file
+
+    print(f"从 OSS 下载系统提示词: {oss_path} -> {target_path}")
+
+    if not shutil.which("ossutil"):
+        raise RuntimeError("ossutil 不可用，无法下载系统提示词文件")
+
+    result = subprocess.run(
+        ["ossutil", "cp", "-f", oss_path, str(target_path)],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"下载系统提示词失败: {result.stderr}")
+
+    print(f"系统提示词下载完成: {target_path}")
+
+
 def prepare_instances(config: Config):
     """[2/5] 准备实例列表"""
     if config.instances:
@@ -739,6 +778,7 @@ def worker_main(config: Config):
     try:
         os.chdir(config.root_dir)
         prepare_llm_config(config)
+        download_system_prompt(config)
         prepare_instances(config)
         run_inference(config)
         run_evaluation(config)
@@ -837,7 +877,7 @@ def main():
         "INFER_WORKERS",
         "EVAL_WORKERS",
         "INSTANCE_TIMEOUT_SEC",
-        "SYSTEM_PROMPT_B64",
+        "SYSTEM_PROMPT_FILE",
         "EVE_FILE",
         "OSS_ROOT",
     ]:
