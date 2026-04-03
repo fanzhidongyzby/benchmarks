@@ -252,7 +252,7 @@ class SWEBenchEvaluation(Evaluation):
         )
 
         # 处理系统提示词
-        system_prompt_filename = os.getenv("SYSTEM_PROMPT_FILE", "system_prompt.j2")
+        system_prompt_filename = os.getenv("SYSTEM_PROMPT_FILE") or "system_prompt.j2"
         logger.info("Using custom system prompt file: %s", system_prompt_filename)
 
         agent = Agent(
