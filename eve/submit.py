@@ -455,6 +455,7 @@ def prepare_llm_config(config: Config):
         return
 
     llm_config = json.loads(config.llm_config)
+    ensure_reasoning_content_model_whitelist(llm_config)
     safe_config = {**llm_config, "api_key": "********"}
     print("LLM_CONFIG:")
     print(json.dumps(safe_config, indent=2))
@@ -462,6 +463,36 @@ def prepare_llm_config(config: Config):
     config_path = config.root_dir / "llm_config.json"
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(llm_config, f, indent=2)
+
+
+def ensure_reasoning_content_model_whitelist(llm_config: dict):
+    """Allow OpenHands SDK to round-trip reasoning_content for this run's model."""
+    auto_enabled = os.environ.get("OPENHANDS_AUTO_SEND_REASONING_CONTENT_MODELS", "1").strip().lower()
+    assert auto_enabled in {"1", "true", "yes", "on", "0", "false", "no", "off"}, (
+        "OPENHANDS_AUTO_SEND_REASONING_CONTENT_MODELS must be a boolean"
+    )
+    if auto_enabled in {"0", "false", "no", "off"}:
+        print("OPENHANDS_AUTO_SEND_REASONING_CONTENT_MODELS disabled", flush=True)
+        return
+
+    if not str(llm_config.get("model") or "").strip():
+        raise ValueError("LLM 配置缺少 model")
+
+    existing = [
+        item.strip().lower()
+        for item in os.environ.get("OPENHANDS_SEND_REASONING_CONTENT_MODELS", "").split(",")
+        if item.strip()
+    ]
+    merged = []
+    for token in [*existing, "*"]:
+        if token not in merged:
+            merged.append(token)
+    os.environ["OPENHANDS_SEND_REASONING_CONTENT_MODELS"] = ",".join(merged)
+    print(
+        "OPENHANDS_SEND_REASONING_CONTENT_MODELS=",
+        os.environ["OPENHANDS_SEND_REASONING_CONTENT_MODELS"],
+        flush=True,
+    )
 
 
 class LLMHealthCheckTimeout(Exception):
@@ -960,6 +991,8 @@ def main():
         "SDK_BRANCH",
         "SDK_REPO",
         "MAX_EVAL_RETRIES",
+        "OPENHANDS_AUTO_SEND_REASONING_CONTENT_MODELS",
+        "OPENHANDS_SEND_REASONING_CONTENT_MODELS",
     ]:
         value = os.environ.get(key, "")
         if value:
