@@ -82,6 +82,7 @@ class Config:
     benchmarks_branch: str = "eve-680ce0f-v1.11.0"
     sdk_repo: str = "https://git@github.com/fanzhidongyzby/software-agent-sdk.git"
     sdk_branch: str = "eve-v1.11.0"
+    strict_results: bool = False
 
     # 路径
     script_dir: Path = field(default_factory=Path)
@@ -118,6 +119,8 @@ class Config:
             benchmarks_branch=os.environ.get("BENCHMARKS_BRANCH", "eve-680ce0f-v1.11.0"),
             sdk_repo=os.environ.get("SDK_REPO", "https://git@github.com/fanzhidongyzby/software-agent-sdk.git"),
             sdk_branch=os.environ.get("SDK_BRANCH", "eve-v1.11.0"),
+            strict_results=os.environ.get("EVE_STRICT_RESULTS", "").lower()
+            in ["1", "y", "yes", "true", "on"],
             script_dir=script_dir,
             root_dir=root_dir,
             log_file=root_dir / "submit.log",
@@ -284,6 +287,8 @@ def convert_to_eve_format(eval_dir: Path) -> dict:
     report = load_json(report_path)
     instances = load_jsonl(jsonl_path)
     metadata = load_json(metadata_path)
+    if not instances:
+        raise ValueError(f"{jsonl_path} 不存在或没有有效实例记录")
 
     if report:
         resolved_ids = set(report.get("resolved_ids", []))
@@ -359,7 +364,11 @@ def convert_to_eve_format(eval_dir: Path) -> dict:
     }
 
 
-def generate_eve_result(config: Config, error_message: Optional[str] = None) -> dict:
+def generate_eve_result(
+    config: Config,
+    error_message: Optional[str] = None,
+    allow_empty: bool = False,
+) -> dict:
     """生成 EVE 结果文件（统一兜底逻辑）"""
     result = None
 
@@ -374,6 +383,9 @@ def generate_eve_result(config: Config, error_message: Optional[str] = None) -> 
         except Exception as e:
             error_message = f"转换过程中发生异常: {e}"
             print(f"错误: {error_message}")
+
+    if result is None and config.strict_results and not allow_empty:
+        raise RuntimeError(error_message or "未生成有效 EVE 结果")
 
     # 统一兜底：生成空结果
     if result is None:
@@ -757,7 +769,7 @@ def upload_results(config: Config):
     # 确保 EVE 结果文件存在（统一兜底）
     eve_path = config.root_dir / config.eve_file
     if not eve_path.exists():
-        generate_eve_result(config, "任务异常终止，未生成结果文件")
+        generate_eve_result(config, "任务异常终止，未生成结果文件", allow_empty=True)
 
     # 打包结果
     results_dir = config.root_dir / "results"
@@ -844,6 +856,7 @@ def worker_main(config: Config):
     print(f"* EVAL_WORKERS:            {config.eval_workers}")
     print(f"* MAX_EVAL_RETRIES:        {config.max_eval_retries}")
     print(f"* INSTANCE_TIMEOUT_SEC:    {config.instance_timeout_sec}s")
+    print(f"* EVE_STRICT_RESULTS:      {config.strict_results}")
     print("-" * 50)
     print("LLM 配置:")
     print(f"  LLM_HEALTH_CHECK:        {config.llm_health_check}")
@@ -853,6 +866,7 @@ def worker_main(config: Config):
     print(f"  LLM_GEMINI:              {config.llm_gemini}")
     print("=" * 50)
 
+    exit_code = 0
     try:
         os.chdir(config.root_dir)
         prepare_llm_config(config)
@@ -869,9 +883,13 @@ def worker_main(config: Config):
         print("=" * 50)
 
     except Exception as e:
+        exit_code = 1
         error_message = str(e)
         print(f"错误: {error_message}")
-        generate_eve_result(config, error_message)
+        if not config.strict_results:
+            generate_eve_result(config, error_message)
+        else:
+            generate_eve_result(config, error_message, allow_empty=True)
 
     finally:
         # 打印结束时间（在上传之前，确保日志完整）
@@ -884,6 +902,8 @@ def worker_main(config: Config):
 
         # 无论成功失败，都上传结果
         upload_results(config)
+        if exit_code != 0:
+            sys.exit(exit_code)
 
 
 # ============================================================================
@@ -993,6 +1013,7 @@ def main():
         "MAX_EVAL_RETRIES",
         "OPENHANDS_AUTO_SEND_REASONING_CONTENT_MODELS",
         "OPENHANDS_SEND_REASONING_CONTENT_MODELS",
+        "EVE_STRICT_RESULTS",
     ]:
         value = os.environ.get(key, "")
         if value:
