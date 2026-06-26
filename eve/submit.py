@@ -790,6 +790,8 @@ def upload_results(config: Config):
     if config.log_file.exists():
         shutil.copy(config.log_file, results_dir / "submit.log")
 
+    litellm_dir = collect_litellm_logs(config, results_dir)
+
     tar_path = config.root_dir / "results.tgz"
     with tarfile.open(tar_path, "w:gz") as tar:
         tar.add(results_dir, arcname="results")
@@ -812,6 +814,20 @@ def upload_results(config: Config):
         print("上传完成")
         print("=" * 50)
 
+        if litellm_dir is not None:
+            subprocess.run(
+                [
+                    "ossutil",
+                    "cp",
+                    "-rf",
+                    str(litellm_dir),
+                    f"{config.oss_bucket}/litellm/",
+                ],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
         # 最后上传 submit.log（静默处理，确保日志内容完整）
         sys.stdout.flush()
         subprocess.run(
@@ -823,6 +839,45 @@ def upload_results(config: Config):
     else:
         print("警告: ossutil 不可用，跳过上传")
         print("=" * 50)
+
+
+def collect_litellm_logs(config: Config, results_dir: Path) -> Path | None:
+    """Expose per-instance LiteLLM request/response logs near EVE result files."""
+    llm_config_path = config.root_dir / "llm_config.json"
+    if not llm_config_path.exists():
+        return None
+
+    with open(llm_config_path, "r", encoding="utf-8") as f:
+        llm_config = json.load(f)
+
+    if not llm_config.get("log_completions"):
+        return None
+
+    eval_outputs = config.root_dir / "eval_outputs"
+    assert eval_outputs.exists(), (
+        f"log_completions enabled but eval_outputs missing: {eval_outputs}"
+    )
+
+    completion_dirs = sorted(eval_outputs.rglob("llm_completions"))
+    assert completion_dirs, (
+        "log_completions enabled but no llm_completions directories were produced"
+    )
+
+    target_root = results_dir / "litellm"
+    target_root.mkdir(parents=True, exist_ok=True)
+
+    copied_files = 0
+    for completion_dir in completion_dirs:
+        for instance_dir in sorted(p for p in completion_dir.iterdir() if p.is_dir()):
+            target_dir = target_root / instance_dir.name
+            if target_dir.exists():
+                shutil.rmtree(target_dir)
+            shutil.copytree(instance_dir, target_dir)
+            copied_files += sum(1 for p in target_dir.rglob("*") if p.is_file())
+
+    assert copied_files > 0, "log_completions enabled but no LiteLLM log files were copied"
+    print(f"LiteLLM request/response logs copied to {target_root} ({copied_files} files)")
+    return target_root
 
     # 清理本地临时文件
     try:
